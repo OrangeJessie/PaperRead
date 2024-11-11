@@ -51,48 +51,7 @@ weighted log-likelihood损失函数，reward是正样本权重（观看时长等
 in-batch item是幂次分布，会导致训练样本存在较大的bias，热门item更常出现在batch中，因此在logit中加logQ correction，其中p\_j是item j 在随机batch中采样概率  
 ![][image7]  
 这个参数比较关键，如果不设置的话推荐的词都非常小众，设置大了的话推荐的词几乎全是热门，参考设置log10(p)，其中p是样本出现的概率。  
-\=========================================================================  
-added by [Eric Wang Peng](mailto:eric.wangpeng@shopee.com)   
-在代码中，这部分的实现有些问题  
-根据定义：  
-p \= B\*n/N  
-这里
 
-* n是某个词出现的次数，  
-* N是所有词出现的次数（所有market之和）  
-* B是训练的batch\_size
-
-这里比较trick的是：  
-我们由于引入的market mask，所以相当于将一个batch拆成了多个小的batch在使用，所了对于一个market m来说，其batch\_size \= B \* N\_m / N，即正比于这个market中词的数量的。  
-代入上面得到：   
-p= B \* N\_m \* n / N^2  
-现在是p \= n/N\_m  
-修正项=B\*N\_m\*N\_m/N^2  
-由于取log，所以log(p) \= log(B) \+ log(N\_m \* n)  \- 2log(N)  \= log(N\_m) \+ log(n) \- 2 log(N)  
-现在是： p \= n / N\_m  ⇒ log(p) \= log(n) \- log(N\_m)   
-修正项是:  log(N\_m) \+ log(n) \- 2 log(N) \- log(n) \+  log(N\_m) \= 2log(N\_m) \- 2 log(N) 
-
-这里可以这么理解：
-
-* 当n越大的时候，说明词越热门，越容易出现在negative 的样本中；  
-* 当N\_m越大的时候，说明这个market比重大，那么这个词出现在别的样本中成为负样本的可能性越大。
-
-对比我们的实现：   
-       ,ln(cast(count(1) over (partition by keyword, market) as double)/cast(count(1) over (partition by market) as double)) as weight  
-是错误的，应该是：  
-       ,ln((count(1) over (partition by keyword, market)) \*(count(1) over (partition by market))) / (count(1) \* count(1))) as weight   
-这里省去了cast. 
-
-这个错误带来的效果是：  
-对于market来说，对于小market的词，p被高估，因此 log(p)过高，s \- log(p)过低，当w是负样本时，梯度不足，学习的比较慢。
-
-\=========================================================================  
-Sijie 补充  
-这里batch使用了分market的batch\_size，那么在计算p时，N也应该是market 总词数而不应该是全部词数  
-因此实际公式应该是B\_market\*n/N\_m  
-对于同一个market来说，B\_market是一个常数，不会影响结果
-
-\========================================================================
 
 **样本纠偏**  
 预估样本在随机batch中的采样概率p，将采样概率p预估转化成连续两次采样到样本之间的平均步数。  
